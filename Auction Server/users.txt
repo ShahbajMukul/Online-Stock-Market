@@ -1,0 +1,4 @@
+1 john@gmail.com john baugh john password 100
+2 brian@gmail.com brian lara lara password 100
+3 ricky@gmail.com ricky pont ricky password 100
+4 sachin@gmail.com sachin bin sachin password 100
