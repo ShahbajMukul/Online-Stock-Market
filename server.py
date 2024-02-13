@@ -1,12 +1,18 @@
-from calendar import c
+""" 
+================================================
+Title:  server.py
+Authors: Abdullah Mahith and Shahbaj Mukul
+Description: Server-side code for the stock trading system.
+================================================
+ """
+
 import socket
-import threading
 import sqlite3
 import threading
 
 # Server config
 SERVER_IP = '127.0.0.1'
-SERVER_PORT = 42069
+SERVER_PORT = 38000
 
 # Create a socket
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -14,65 +20,119 @@ server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 # binding the socket to the server ip and port
 server_socket.bind((SERVER_IP, SERVER_PORT))
 
-# Listen
+# Listen for incoming connections
 server_socket.listen()
 print(f"\nSERVER LISTENING ON {SERVER_IP}:{SERVER_PORT}\n")
 
-# Handle client calls
+# Handle client calls, including login, register, buy, sell, list, balance, and logout
 def handle_client(client_socket):
-    with client_socket, sqlite3.connect('stock_trading.db') as conn:
-       # recive the command from the client
+    user_id = None # user_id is None if the user is not logged in
+
+# The server will keep listening for commands from the client
+    while True:
+        # Command will be given in a specific format and it will be broken down into parts to get its parameters
         command = client_socket.recv(1024).decode('utf-8')
-        print(f"\{command} Requested")
-# 
+        command_parts = command.split()
+        if command_parts[0] == "LOGIN":
+            if len(command_parts) == 3:
+                user_name, password = command_parts[1], command_parts[2] # ex. LOGIN <username> <password> or LOGIN BMarley VEvwv45684
+                user_id = handle_login(client_socket, user_name, password)
+            else: # if the command is not in the correct format
+                response = "Error: LOGIN command format is incorrect."
+                client_socket.send(response.encode('utf-8'))
+        elif command_parts[0] == "QUIT" or command_parts[0] == "LOGOUT": # if the user wants to logout, we set the user_id to None, but it still can be logged in again
+            user_id = None
+            response = "Successfully logged out."
+            client_socket.send(response.encode('utf-8'))
+
+        # if the user wants to register, we check if the username already exists, if not, we register the user. 
+        # for now, we are allowing the client to set the initial balance, but in a real-world scenario, the initial balance should be set by the admin (bank transfer etc)
+        # first_name and last_name are also not being requested, but it can be added if needed. 
+        elif command_parts[0] == "REGISTER": 
+            if len(command_parts) == 4: 
+                # ex. REGISTER <username> <password> <usd_balance> or 
+                # REGISTER BMarley VEvwv45684 1000
+                user_name, password, usd_balance = command_parts[1], command_parts[2], command_parts[3]
+                response = handle_register(client_socket, user_name, password, usd_balance)
+                client_socket.send(response.encode('utf-8'))
+            else:
+                # if the command is not in the correct format
+                response = "Error: REGISTER command format is incorrect." 
+                client_socket.send(response.encode('utf-8'))
+        elif command_parts[0] == "SHUTDOWN":
+            # if the server is requested to shutdown, we close the server socket and break the loop
+            # this should be handled by the admin, not the client. For now, we are allowing the client to do it as required by the assignment
+            server_socket.close()
+            break
+        elif user_id is not None:
+            # general user commands, such as BUY, SELL, LIST, BALANCE
+            handle_user_command(client_socket, command, user_id) 
+        else:
+            # if the user is not logged in, we don't allow any commands except for LOGIN, REGISTER, and QUIT
+            response = "Error: You are not logged in."
+            client_socket.send(response.encode('utf-8'))
+
+# handle login. If the user is found in the database, we return the user_id, otherwise, we return None. In each case, we send a response to the client
+def handle_login(client_socket, user_name, password):
+    with sqlite3.connect('stock_trading.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT ID FROM Users WHERE user_name = ? AND password = ?", (user_name, password)) # check against the database if the user exists in teh Users table
+        user_id = c.fetchone()
+        if user_id:
+            print(f"User {user_name} logged in.")
+            response = f"Successfully logged in as {user_name}."
+        else:
+            print(f"Invalid login attempt for {user_name}.")
+            response = "Invalid username or password."
+        client_socket.send(response.encode('utf-8'))
+        return user_id[0] if user_id else None
+
+# handle register. If the user is successfully registered, we return the user_id, otherwise, we return None. In each case, we send a response to the client    
+def handle_register(client_socket, user_name, password, usd_balance):
+    with sqlite3.connect('stock_trading.db') as conn:
+        c = conn.cursor()
+        c.execute("SELECT ID FROM Users WHERE user_name = ?", (user_name,))
+        user_id = c.fetchone()
+        if user_id: # edge case where the given username already exists
+            response = "Username already exists."
+        else:
+            # if the username is not found, we register the user
+            # again, for basic registration, we are allowing the client to set the initial balance It should be set by the admin in a real-world scenario or enhanced security protocols.
+            c.execute("INSERT INTO Users (user_name, password, usd_balance) VALUES (?, ?, ?)", ( user_name, password, usd_balance))
+            conn.commit()
+            response = "Successfully registered."
+        client_socket.send(response.encode('utf-8'))
+        return user_id[0] if user_id else None
+
+# handle user commands such as BUY, SELL, LIST, BALANCE. details are in the function
+def handle_user_command(client_socket, command, user_id):
+    with sqlite3.connect('stock_trading.db') as conn:
+        user_name = conn.execute("SELECT user_name FROM Users WHERE ID = ?", (user_id,)).fetchone()[0]
+        print(f"{command} Requested by User ID: {user_id}, user_name: {user_name}")
         command_text = command.split()
-        
-        # comply with the request
+
         if command_text[0] == "LIST":
-            c = conn.cursor()
-            c.execute("SELECT * FROM StockMarket")
-            stocks = c.fetchall(); # fetch all 
+            response = handle_list(conn, user_id) 
+        elif command_text[0] == "BUY":
+            response = handle_buy_command(conn, user_id, command_text)
+        elif command_text[0] == "SELL":
+            response = handle_sell_command(conn, user_id, command_text)
+        elif command_text[0] == "BALANCE":
+            response = handle_balance(conn, user_id)
+        else:
+            response = "Unknown command or command not allowed."
 
-            response = "LIST of stocks:" + "".join([f"{stock[0]} - {stock[1]} - {stock[2]}: {stock[3]} shares " for stock in stocks])
-            client_socket.send(response.encode('utf-8'))
+        client_socket.send(response.encode('utf-8'))
 
-        if command_text[0] == "BUY":
-            if len(command_text) >= 4:
-                user_id, stock_symbol, stock_quantity = int(command_text[1]), command_text[2], int(command_text[3])
-                response = handle_buy_command(conn, user_id, stock_symbol, stock_quantity)
-                client_socket.send(response.encode('utf-8'))
-            else:
-                response = "Error: BUY command format is incorrect."
-                client_socket.send(response.encode('utf-8'))
-        
-        if command_text[0] == "SELL":
-            if len(command_text) >= 4:
-                user_id, stock_symbol, stock_quantity = int(command_text[1]), command_text[2], int(command_text[3])
-                response = handle_sell_command(conn, user_id, stock_symbol, stock_quantity)
-                client_socket.send(response.encode('utf-8'))
-            else:
-                response = "Error: SELL command format is incorrect."
-                client_socket.send(response.encode('utf-8'))
-        if command_text[0] == "BALANCE":
-            if len(command_text) >= 2:
-                user_id = int(command_text[1])
-                c = conn.cursor()
-                c.execute("SELECT usd_balance FROM Users WHERE ID = ?", (user_id,))
-                user_balance = c.fetchone()
-                if user_balance:
-                    response = f"User {user_id} has a balance of ${user_balance[0]}"
-                else:
-                    response = "User not found"
-            else:
-                response = "Error: BALANCE command format is incorrect."
-            client_socket.send(response.encode('utf-8'))
-def handle_buy_command(conn, user_id, stock_symbol, req_stock_quantity):
+# handle buy command. If the stock is available (in the stock market) and the user has enough balance, we update the user's balance and stock quantity. In each case, we send a response to the client 
+def handle_buy_command(conn, user_id, command_text):
     c = conn.cursor()
     # check if the stock is available
+    stock_symbol, req_stock_quantity = command_text[1], int(command_text[2])
     c.execute("SELECT stock_price FROM StockMarket WHERE stock_symbol = ?", (stock_symbol,))
     stock_price = c.fetchone()
     if not stock_price:
-        return "Stock not found" # if we don't have the stock, there won't be a price for it
+        return "Stock not found" # if we don't have the stock, there won't be a price for it since its nonnullable
     
     stock_price = stock_price[0]
     total_price = stock_price * req_stock_quantity
@@ -81,15 +141,20 @@ def handle_buy_command(conn, user_id, stock_symbol, req_stock_quantity):
     c.execute("SELECT usd_balance FROM Users WHERE ID = ?", (user_id,))
     user_balance = c.fetchone()
     if not user_balance:
-        return "User not found"
-    if user_balance[0] < total_price:
-        return "Insufficient balance"
+        return "User not found" # edge case, we should never reach here because the user_id is already validated
+    if user_balance[0] < total_price: # if the user doesn't have enough balance to purchase the stock
+        response = "Insufficient balance. Wallet: ${user_balance[0]} but ${total_price} is needed to buy {req_stock_quantity} shares of {stock_symbol}."
+        print(f"{user_id}: {response}")
+        return response
     else:
+        # user has sufficient balance, update the balance and the stock quantity
         new_balance = user_balance[0] - total_price
         c.execute("UPDATE Users SET usd_balance = ? WHERE ID = ?", (new_balance, user_id))
         update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_quantity)
         conn.commit()
-        return f"Successfully bought {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
+        response = f"Successfully bought {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
+        print(f"{user_id}: {response}")
+        return response
 
 def update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_quantity):
     c = conn.cursor()
@@ -97,6 +162,7 @@ def update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_q
     c.execute("SELECT stock_name FROM StockMarket WHERE stock_symbol = ?", (stock_symbol,))
     stock_name_result = c.fetchone()
     if not stock_name_result:
+        print(f"Stock {stock_symbol} requested, but not found in the market.")
         return "Stock not found"
     stock_name = stock_name_result[0]
     
@@ -111,18 +177,16 @@ def update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_q
 
     conn.commit() 
 
-def handle_sell_command(conn, user_id, stock_symbol, req_stock_quantity):
+def handle_sell_command(conn, user_id, command_text):
     c = conn.cursor()
-
+    stock_symbol, req_stock_quantity = command_text[1], int(command_text[2])
     c.execute("SELECT stock_price FROM StockMarket WHERE stock_symbol = ?", (stock_symbol,))
     stock_price_result = c.fetchone()
     if stock_price_result is None:
         return "Stock not found in the market."
     stock_price = stock_price_result[0]
 
-    # test
-    print("user_id:", user_id)
-    print("stock_symbol:", stock_symbol)
+   
 
     # check if user has the stock and enough of it
     c.execute("SELECT stock_quantity FROM Stocks WHERE user_id = ? AND stock_symbol = ?", (user_id, stock_symbol))
@@ -151,6 +215,27 @@ def handle_sell_command(conn, user_id, stock_symbol, req_stock_quantity):
     conn.commit()
     return f"Successfully sold {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
 
+def handle_list(conn, user_id):
+    c = conn.cursor()
+    c.execute("SELECT stock_symbol, stock_name, stock_price FROM StockMarket")
+    stocks = c.fetchall()
+    response = "Stocks available in the market:\n"
+    for stock in stocks:
+        response += f"{stock[0]} - {stock[1]} - ${stock[2]}\n"
+    c.execute("SELECT stock_symbol, stock_name, stock_quantity FROM Stocks WHERE user_id = ?", (user_id,))
+    user_stocks = c.fetchall()
+    response += "\nYour stocks:\n"
+    for stock in user_stocks:
+        response += f"{stock[0]} - {stock[1]} - {stock[2]} shares\n"
+    return response
+def handle_balance(conn, user_id):
+    c = conn.cursor()
+    c.execute("SELECT usd_balance FROM Users WHERE ID = ?", (user_id,))
+    user_balance = c.fetchone()
+    if user_balance:
+        return f"Your balance is ${user_balance[0]}"
+    else:
+        return "User not found"
 
 
 while True:

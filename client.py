@@ -1,44 +1,65 @@
-import socket
-
-s=socket.socket()
-
-port = 42069
-
-s.connect(('127.0.0.1', port))
-
-# s.sendall(b'LIST')
-# data = s.recv(1024)
-
-# print("Recieved", repr(data))
-
-# print("\n")
-
-# BUY
-# Send a BUY command to the server
-
-""" buy_command = 'BUY 1 TSLA 2'.encode('utf-8')
-s.sendall(buy_command)
-import time
-time.sleep(1)
-# Recieve the response from the server
-buy_data = s.recv(1299)
-print("Recieved", repr(buy_data))
+""" 
+================================================
+Title:  client.py
+Authors: Abdullah Mahith and Shahbaj Mukul
+Description: Client-side code for the stock trading system.
+================================================
  """
- 
-# SELL
-# Send a SELL command to the server
 
-""" sell_command = 'SELL 1 MSFT 1'.encode('utf-8')
-s.sendall(sell_command)
-sell_data = s.recv(1024)
-print("Recieved", repr(sell_data))
+import socket
+import sys
 
-s.close() """
+# Check for command line arguments to get the server IP and port
+if len(sys.argv) >= 3:
+    server_ip = sys.argv[1]  
+    server_port = int(sys.argv[2])  
+else:
+    print("Usage: python client.py <server_ip> <server_port>")
+    sys.exit(1)
 
-# BALANCE
-# Send a BALANCE command to the server
 
-balance_command = 'BALANCE 1'.encode('utf-8')
-s.sendall(balance_command)
-balance_data = s.recv(1024)
-print("Recieved", repr(balance_data))
+def new_session():
+    print("\nWelcome to the Stock Trading System!\n")
+
+    print("Please enter your username and password to login or register a new account.\n Ex. LOGIN <username> <password> or REGISTER <username> <password> <usd_balance>\n")
+
+def print_menu():
+    print("\n\nAvailable Commands:")
+    print("LIST - List all stocks")
+    print("BUY <symbol> <quantity> - Buy stocks")
+    print("SELL <symbol> <quantity> - Sell stocks")
+    print("BALANCE - Check your balance")
+    print("LOGOUT - Log out")
+    print("EXIT - Exit the program")
+
+def main():
+    s = socket.socket()
+
+    # Using the IP and port from the command line arguments, connect to the server
+    try:
+        s.connect((server_ip, server_port))
+        print(f"Connected to {server_ip} on port {server_port}\n==========================================")
+    except Exception as e: # If unable to connect, print the error and exit
+        print(f"Unable to connect to {server_ip} on port {server_port}: {e}")
+        sys.exit(1)
+
+    new_session()
+    while True:       
+        command = input("Enter a command: ")
+    
+        if command == "EXIT":
+            break
+        elif command == "LOGOUT":
+            s.sendall("LOGOUT".encode('utf-8'))
+            print("Logged out successfully.\n==========================================")
+            new_session()
+        else:
+            s.sendall(command.encode('utf-8'))
+            response = s.recv(1024).decode('utf-8')
+            print("\n------------------------------------------\nServer Response:", response,"\n------------------------------------------")
+            print_menu()        
+    s.close()
+
+
+if __name__ == "__main__":
+    main()
