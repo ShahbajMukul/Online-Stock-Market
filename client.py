@@ -10,6 +10,7 @@ import socket
 import sys
 
 # Check for command line arguments to get the server IP and port
+# Command to run the code and connect with the server: python client.py 127.0.0.1 38000
 if len(sys.argv) >= 3:
     server_ip = sys.argv[1]  
     server_port = int(sys.argv[2])  
@@ -49,10 +50,6 @@ def main():
     
         if command == "EXIT":
             break
-        elif command == "LOGOUT":
-            s.sendall("LOGOUT".encode('utf-8'))
-            print("Logged out successfully.\n==========================================")
-            new_session()
         else:
             s.sendall(command.encode('utf-8'))
             response = s.recv(1024).decode('utf-8')

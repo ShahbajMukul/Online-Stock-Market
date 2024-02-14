@@ -79,10 +79,10 @@ def handle_login(client_socket, user_name, password):
         c.execute("SELECT ID FROM Users WHERE user_name = ? AND password = ?", (user_name, password)) # check against the database if the user exists in teh Users table
         user_id = c.fetchone()
         if user_id:
-            print(f"User {user_name} logged in.")
+            print(f"User {user_name} logged in.\n")
             response = f"Successfully logged in as {user_name}."
         else:
-            print(f"Invalid login attempt for {user_name}.")
+            print(f"Invalid login attempt for {user_name}.\n")
             response = "Invalid username or password."
         client_socket.send(response.encode('utf-8'))
         return user_id[0] if user_id else None
@@ -108,7 +108,7 @@ def handle_register(client_socket, user_name, password, usd_balance):
 def handle_user_command(client_socket, command, user_id):
     with sqlite3.connect('stock_trading.db') as conn:
         user_name = conn.execute("SELECT user_name FROM Users WHERE ID = ?", (user_id,)).fetchone()[0]
-        print(f"{command} Requested by User ID: {user_id}, user_name: {user_name}")
+        print(f"{command} Requested by User ID: {user_id}, user_name: {user_name}.\n")
         command_text = command.split()
 
         if command_text[0] == "LIST":
@@ -143,8 +143,8 @@ def handle_buy_command(conn, user_id, command_text):
     if not user_balance:
         return "User not found" # edge case, we should never reach here because the user_id is already validated
     if user_balance[0] < total_price: # if the user doesn't have enough balance to purchase the stock
-        response = "Insufficient balance. Wallet: ${user_balance[0]} but ${total_price} is needed to buy {req_stock_quantity} shares of {stock_symbol}."
-        print(f"{user_id}: {response}")
+        response = f"Insufficient balance. Wallet: ${user_balance[0]} but ${total_price} is needed to buy {req_stock_quantity} shares of {stock_symbol}."
+        print(f"{user_id}: {response}.\n")
         return response
     else:
         # user has sufficient balance, update the balance and the stock quantity
@@ -153,7 +153,7 @@ def handle_buy_command(conn, user_id, command_text):
         update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_quantity)
         conn.commit()
         response = f"Successfully bought {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
-        print(f"{user_id}: {response}")
+        print(f"{user_id}: {response}.\n")
         return response
 
 def update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_quantity):
@@ -162,7 +162,7 @@ def update_or_insert_stock(conn, user_id, stock_symbol, stock_price, req_stock_q
     c.execute("SELECT stock_name FROM StockMarket WHERE stock_symbol = ?", (stock_symbol,))
     stock_name_result = c.fetchone()
     if not stock_name_result:
-        print(f"Stock {stock_symbol} requested, but not found in the market.")
+        print(f"Stock {stock_symbol} requested, but not found in the market.\n")
         return "Stock not found"
     stock_name = stock_name_result[0]
     
@@ -191,12 +191,14 @@ def handle_sell_command(conn, user_id, command_text):
     # check if user has the stock and enough of it
     c.execute("SELECT stock_quantity FROM Stocks WHERE user_id = ? AND stock_symbol = ?", (user_id, stock_symbol))
     user_stock_info = c.fetchone()
-    print(f"user_stock_info: {user_stock_info}")
+    print(f"user_stock_info: {user_stock_info}.\n")
     if user_stock_info is None:
-        print("User does not have this stock.")
-        return "User does not have this stock."
+        print(f"User ${user_id} does not have this stock.\n")
+        return "You don't not have this stock."
     elif user_stock_info[0] < req_stock_quantity:
-        return "Requested stock quantity exceeds the user's stock balance."
+        response = f"Requested stock quantity exceeds the user ${user_id}'s stock balance.\n"
+        print(response)
+        return response
     total_price = stock_price * req_stock_quantity
 
     # update user's balance
@@ -213,13 +215,16 @@ def handle_sell_command(conn, user_id, command_text):
         c.execute("UPDATE Stocks SET stock_quantity = ? WHERE user_id = ? AND stock_symbol = ?", (user_stock_quantity, user_id, stock_symbol))
 
     conn.commit()
-    return f"Successfully sold {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
+    response = f"Successfully sold {req_stock_quantity} shares of {stock_symbol} for ${total_price}. Wallet: ${new_balance}"
+    print(f"user ${user_id}:" + response + "\n")
+    return response
 
 def handle_list(conn, user_id):
     c = conn.cursor()
     c.execute("SELECT stock_symbol, stock_name, stock_price FROM StockMarket")
     stocks = c.fetchall()
     response = "Stocks available in the market:\n"
+    print(f"user ${user_id}: Requested stock list\n")
     for stock in stocks:
         response += f"{stock[0]} - {stock[1]} - ${stock[2]}\n"
     c.execute("SELECT stock_symbol, stock_name, stock_quantity FROM Stocks WHERE user_id = ?", (user_id,))
