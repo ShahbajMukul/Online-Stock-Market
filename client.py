@@ -3,6 +3,7 @@
 Title:  client.py
 Authors: Abdullah Mahith and Shahbaj Mukul
 Description: Client-side code for the stock trading system.
+Run: python client.py 127.0.0.1 38000
 ================================================
  """
 
@@ -25,7 +26,7 @@ def new_session():
     print("Please enter your username and password to login or register a new account.\n Ex. LOGIN <username> <password> or REGISTER <username> <password> <usd_balance>\n")
 
 def print_menu():
-    print("\n\nAvailable Commands:")
+    print("\nAvailable Commands:")
     print("LIST - List all stocks")
     print("BUY <symbol> <quantity> - Buy stocks")
     print("SELL <symbol> <quantity> - Sell stocks")
@@ -46,8 +47,7 @@ def main():
 
     new_session()
     while True:       
-        command = input("Enter a command: ")
-    
+        command = input("Enter a command: ")    
         if command == "EXIT":
             break
         else:
