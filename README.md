@@ -1,4 +1,4 @@
-Student:
+Students:
 Shahbaj Mukul; shahbajm@umich.edu
 Abdullah Mahith; ammahith@umich.edu
 

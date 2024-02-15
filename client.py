@@ -6,9 +6,9 @@ Description: Client-side code for the stock trading system.
 Run: python client.py 127.0.0.1 38000
 ================================================
  """
-
 import socket
 import sys
+import time
 
 # Check for command line arguments to get the server IP and port
 # Command to run the code and connect with the server: python client.py 127.0.0.1 38000
@@ -32,7 +32,7 @@ def print_menu():
     print("SELL <symbol> <quantity> - Sell stocks")
     print("BALANCE - Check your balance")
     print("LOGOUT - Log out")
-    print("EXIT - Exit the program")
+    print("SHUTDOWN - Exit the program")
 
 def main():
     s = socket.socket()
@@ -48,7 +48,9 @@ def main():
     new_session()
     while True:       
         command = input("Enter a command: ")    
-        if command == "EXIT":
+        if command == "SHUTDOWN":
+            s.sendall(command.encode('utf-8'))
+            response = s.recv(1024).decode('utf-8')
             break
         else:
             s.sendall(command.encode('utf-8'))

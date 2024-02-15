@@ -31,50 +31,62 @@ def handle_client(client_socket):
 # The server will keep listening for commands from the client
     while True:
         # Command will be given in a specific format and it will be broken down into parts to get its parameters
-        command = client_socket.recv(1024).decode('utf-8')
-        command_parts = command.split()
-        if command_parts[0] == "LOGIN":
-            if len(command_parts) == 3:
-                user_name, password = command_parts[1], command_parts[2] # ex. LOGIN <username> <password> or LOGIN BMarley VEvwv45684
-                user_id = handle_login(client_socket, user_name, password)
-            else: # if the command is not in the correct format
-                response = "Error: LOGIN command format is incorrect."
-                client_socket.send(response.encode('utf-8'))
-        elif command_parts[0] == "QUIT" or command_parts[0] == "LOGOUT": # if the user wants to logout, we set the user_id to None, but it still can be logged in again
-            user_id = None
-            response = "Successfully logged out."
-            client_socket.send(response.encode('utf-8'))
+        try:
+            command = client_socket.recv(1024).decode('utf-8').strip()
+            if not command:
+                # No command received, possibly the client disconnected.
+                print("Connection lost with the client\n")
+                break
+            command_parts = command.split()
 
-        # if the user wants to register, we check if the username already exists, if not, we register the user. 
-        # for now, we are allowing the client to set the initial balance, but in a real-world scenario, the initial balance should be set by the admin (bank transfer etc)
-        # first_name and last_name are also not being requested, but it can be added if needed. 
-        elif command_parts[0] == "REGISTER": 
-            if len(command_parts) == 4: 
-                # ex. REGISTER <username> <password> <usd_balance> or 
-                # REGISTER BMarley VEvwv45684 1000
-                user_name, password, usd_balance = command_parts[1], command_parts[2], command_parts[3]
+            if command_parts:
+                if command_parts[0] == "SHUTDOWN":
+                    response = "Shutting down connection"
+                    client_socket.send(response.encode('utf-8'))
 
-                # handle_register will return the user_id if the user is successfully registered, otherwise, it will return None
-                # so if the response is not None, user is logged in and response is sent to the client. otherwise the response is already sent by handle_register 
-                user_id = handle_register(client_socket, user_name, password, usd_balance)
-                
-            else:
-                # if the command is not in the correct format
-                response = "Error: REGISTER command format is incorrect." 
-                client_socket.send(response.encode('utf-8'))
-        elif command_parts[0] == "SHUTDOWN":
-            # if the server is requested to shutdown, we close the server socket and break the loop
-            # this should be handled by the admin, not the client. For now, we are allowing the client to do it as required by the assignment
-            server_socket.close()
-            break
-        elif user_id is not None:
-            # general user commands, such as BUY, SELL, LIST, BALANCE
-            handle_user_command(client_socket, command, user_id) 
-        else:
-            # if the user is not logged in, we don't allow any commands except for LOGIN, REGISTER, and QUIT
-            response = "Error: You are not logged in."
-            client_socket.send(response.encode('utf-8'))
+                elif command_parts[0] == "LOGIN": # LOGIN Username password
+                    if len(command_parts) == 3:
+                        user_name, password = command_parts[1], command_parts[2] # ex. LOGIN <username> <password> or LOGIN BMarley VEvwv45684
+                        user_id = handle_login(client_socket, user_name, password)
+                    else: # if the command is not in the correct format
+                        response = "Error: LOGIN command format is incorrect."
+                        client_socket.send(response.encode('utf-8'))
+                elif command_parts[0] == "QUIT" or command_parts[0] == "LOGOUT": # if the user wants to logout, we set the user_id to None, but it still can be logged in again
+                    user_id = None
+                    response = "Successfully logged out."
+                    client_socket.send(response.encode('utf-8'))
 
+                # if the user wants to register, we check if the username already exists, if not, we register the user. 
+                # for now, we are allowing the client to set the initial balance, but in a real-world scenario, the initial balance should be set by the admin (bank transfer etc)
+                # first_name and last_name are also not being requested, but it can be added if needed. 
+                elif command_parts[0] == "REGISTER": 
+                    if len(command_parts) == 4: 
+                        # ex. REGISTER <username> <password> <usd_balance> or 
+                        # REGISTER BMarley VEvwv45684 1000
+                        user_name, password, usd_balance = command_parts[1], command_parts[2], command_parts[3]
+
+                        # handle_register will return the user_id if the user is successfully registered, otherwise, it will return None
+                        # so if the response is not None, user is logged in and response is sent to the client. otherwise the response is already sent by handle_register 
+                        user_id = handle_register(client_socket, user_name, password, usd_balance)
+                        
+                    else:
+                        # if the command is not in the correct format
+                        response = "Error: REGISTER command format is incorrect." 
+                        client_socket.send(response.encode('utf-8'))
+            
+                elif user_id is not None:
+                    # general user commands, such as BUY, SELL, LIST, BALANCE
+                    handle_user_command(client_socket, command, user_id) 
+                else:
+                    # if the user is not logged in, we don't allow any commands except for LOGIN, REGISTER, and QUIT
+                    response = "Error: You are not logged in."
+                    client_socket.send(response.encode('utf-8'))
+        except IndexError as e:
+            print(f"Error processing command: {e}")
+            break  # Break the loop if there's an error
+        except Exception as e:
+            print(f"Unexpected error: {e}")
+            break  # Handle any other unexpected error
 # handle login. If the user is found in the database, we return the user_id, otherwise, we return None. In each case, we send a response to the client
 def handle_login(client_socket, user_name, password):
     with sqlite3.connect('stock_trading.db') as conn:
@@ -126,6 +138,8 @@ def handle_user_command(client_socket, command, user_id):
             response = handle_sell_command(conn, user_id, command_text)
         elif command_text[0] == "BALANCE":
             response = handle_balance(conn, user_id)
+        elif command_text[0] == "SHUTDOWN":
+            response = handle_shutdown(conn, user_id)
         else:
             response = "Unknown command or command not allowed."
 
@@ -224,6 +238,9 @@ def handle_sell_command(conn, user_id, command_text):
     response = f"Successfully sold {req_stock_quantity} shares of {stock_symbol} for ${total_price}.\nWallet: ${new_balance}"
     print(f"user_id: {user_id}:" + response + "\n")
     return response
+
+def handle_shutdown():
+    return
 
 def handle_list(conn, user_id):
     c = conn.cursor()
