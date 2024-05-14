@@ -5,7 +5,7 @@ Abdullah Mahith; ammahith@umich.edu
 This project implements an online stock trading application using network sockets. It comprises both server and client components communicating via TCP sockets. The python programming language was used to create this tool. The primary goal is to create a system where users can perform stock transactions efficiently.
 
 How to Compile the Program:
-Since a Makefile is provided, change to the current project directory and execute the make command to compile the program.
+pip install
 
 How to Run:
 Server Side:
